@@ -1,0 +1,29 @@
+# deps
+node_modules/
+
+# build
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# env & secrets
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+
+# os/editor
+.DS_Store
+.idea/
+.vscode/
+
+# test artifacts
+playwright-report/
+test-results/
+
+# drizzle generated
+apps/api/drizzle/meta/
