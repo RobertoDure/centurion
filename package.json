@@ -15,7 +15,11 @@
     "format:check": "prettier --check .",
     "test": "pnpm -r --if-present run test",
     "build": "pnpm -r --if-present run build",
-    "clean": "pnpm -r --if-present run clean"
+    "clean": "pnpm -r --if-present run clean",
+    "infra:up": "docker compose -f infra/docker-compose.yml up -d",
+    "infra:down": "docker compose -f infra/docker-compose.yml down -v",
+    "infra:topics": "docker compose -f infra/docker-compose.yml run --rm kafka-init",
+    "infra:logs": "docker compose -f infra/docker-compose.yml logs -f"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

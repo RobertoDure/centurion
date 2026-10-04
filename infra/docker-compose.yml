@@ -1,0 +1,89 @@
+name: centurion
+
+services:
+  postgres:
+    image: postgres:17.2-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: centurion
+      POSTGRES_PASSWORD: centurion
+      POSTGRES_DB: centurion
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U centurion -d centurion']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  kafka:
+    image: apache/kafka:3.9.0
+    restart: unless-stopped
+    ports:
+      - '9092:9092'
+    environment:
+      CLUSTER_ID: '4L6g3nShT-eMCtK--X86sw'
+      KAFKA_NODE_ID: '1'
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,INTERNAL://:29092,CONTROLLER://:29093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: '1'
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: '1'
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: '1'
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: '0'
+      KAFKA_NUM_PARTITIONS: '1'
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+      - ./scripts:/scripts:ro
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          '/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1',
+        ]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 20s
+
+  jev-mock:
+    # Placeholder until T2.2 replaces this with the real Fastify build.
+    image: node:22-alpine
+    restart: unless-stopped
+    command: ['node', '/app/server.mjs']
+    environment:
+      PORT: '8080'
+    ports:
+      - '8080:8080'
+    volumes:
+      - ./jev-mock-placeholder.mjs:/app/server.mjs:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:8080/health >/dev/null 2>&1']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  kafka-init:
+    image: apache/kafka:3.9.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ['/bin/bash', '/scripts/create-topics.sh']
+    environment:
+      KAFKA_BOOTSTRAP: kafka:29092
+      KAFKA_TOPIC_PARTITIONS: '1'
+      KAFKA_TOPIC_REPLICATION: '1'
+    volumes:
+      - ./scripts:/scripts:ro
+    restart: 'no'
+
+volumes:
+  postgres-data:
+  kafka-data:
