@@ -15,6 +15,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "build": "tsc --noEmit",
-    "clean": "rm -rf dist coverage"
+    "clean": "rm -rf dist coverage",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
   }
 }
