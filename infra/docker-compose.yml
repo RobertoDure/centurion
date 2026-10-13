@@ -54,18 +54,16 @@ services:
       start_period: 20s
 
   jev-mock:
-    # Placeholder until T2.2 replaces this with the real Fastify build.
-    image: node:22-alpine
+    build:
+      context: ..
+      dockerfile: apps/jev-mock/Dockerfile
     restart: unless-stopped
-    command: ['node', '/app/server.mjs']
     environment:
       PORT: '8080'
     ports:
       - '8080:8080'
-    volumes:
-      - ./jev-mock-placeholder.mjs:/app/server.mjs:ro
     healthcheck:
-      test: ['CMD-SHELL', 'wget -qO- http://localhost:8080/health >/dev/null 2>&1']
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:8080/health >/dev/null 2>&1']
       interval: 5s
       timeout: 5s
       retries: 20

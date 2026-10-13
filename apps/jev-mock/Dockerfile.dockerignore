@@ -1,0 +1,10 @@
+# Keep the repo-root build context small (the Dockerfile only COPYs explicit paths).
+**/node_modules
+**/coverage
+**/dist
+**/build
+**/*.log
+.git
+.gitignore
+playwright-report
+test-results
