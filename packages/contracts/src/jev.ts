@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { descriptionSchema } from './json';
+import { descriptionSchema, jsonArraySchema, jsonObjectSchema } from './json';
 
 export const CHOICE_MIN_OPTIONS = 2;
 export const CHOICE_MAX_OPTIONS = 255;
@@ -102,7 +102,7 @@ export type JevEvaluation = z.infer<typeof jevEvaluationSchema>;
 
 /** Request body of `POST /v1/systemone`. */
 export const jevApiRequestSchema = z.strictObject({
-  state: z.union([z.string(), z.record(z.string(), z.unknown()), z.array(z.unknown())]),
+  state: z.union([z.string(), jsonObjectSchema, jsonArraySchema]),
   model: z.string().min(1),
   questions: z.record(z.string(), jevQuestionSchema),
 });

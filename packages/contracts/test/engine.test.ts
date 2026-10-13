@@ -5,7 +5,9 @@ import {
   isInScope,
   selectInScope,
   type ChoiceAnswer,
+  type JevAnswer,
   type NoulAnswer,
+  type RuleCondition,
   type RuleScope,
   type ScoreAnswer,
 } from '../src';
@@ -123,14 +125,15 @@ describe('evaluateRule / Score', () => {
 });
 
 describe('evaluateRule / primitive mismatch', () => {
-  it.each([
-    [{ type: 'noul', op: 'gte', threshold: 0.5 } as const, choice('a')],
-    [{ type: 'noul', op: 'gte', threshold: 0.5 } as const, score(5)],
-    [{ type: 'choice', anyOf: ['a'] } as const, noul(0.9)],
-    [{ type: 'choice', anyOf: ['a'] } as const, score(5)],
-    [{ type: 'score', op: 'gte', threshold: 2 } as const, noul(0.9)],
-    [{ type: 'score', op: 'gte', threshold: 2 } as const, choice('a')],
-  ])('returns NOT_TRIGGERED instead of throwing', (condition, answer) => {
+  const mismatches: Array<[RuleCondition, JevAnswer]> = [
+    [{ type: 'noul', op: 'gte', threshold: 0.5 }, choice('a')],
+    [{ type: 'noul', op: 'gte', threshold: 0.5 }, score(5)],
+    [{ type: 'choice', anyOf: ['a'] }, noul(0.9)],
+    [{ type: 'choice', anyOf: ['a'] }, score(5)],
+    [{ type: 'score', op: 'gte', threshold: 2 }, noul(0.9)],
+    [{ type: 'score', op: 'gte', threshold: 2 }, choice('a')],
+  ];
+  it.each(mismatches)('returns NOT_TRIGGERED instead of throwing', (condition, answer) => {
     expect(evaluateRule({ condition }, answer)).toBe('NOT_TRIGGERED');
   });
 });
