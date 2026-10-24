@@ -5,6 +5,8 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import type { Pool } from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { ActionExecutor } from '../../src/actions/executor';
+import { ActionRegistry } from '../../src/actions/registry';
 import { createDb, createPool, type Database } from '../../src/db/client';
 import { createRepositories, type Repositories } from '../../src/db/repositories';
 import { rules } from '../../src/db/schema';
@@ -336,5 +338,99 @@ describe('EvaluationsRepository', () => {
     );
     const entry = await repos.evaluations.get('bad-eval');
     expect(entry?.kind).toBe('invalid');
+  });
+});
+
+describe('ActionExecutor against the real outbox', () => {
+  async function seedExecution(messageId: string, offset: string): Promise<{ flagId: string; actionId: string }> {
+    const action = await repos.actions.create({
+      type: 'kafka_topic',
+      name: `action-${messageId}`,
+      enabled: true,
+      config: { topic: 'logs.flags' },
+    });
+    const rule = await repos.rules.create({ ...validRule, name: `rule-${messageId}`, actionIds: [action.id] });
+    const recorded = await repos.outcomes.record({
+      messageId,
+      evaluation: {
+        messageId,
+        sourceId: 'svc',
+        topic: 'logs.raw',
+        partition: 0,
+        offset,
+        partial: false,
+        status: 'flagged',
+      },
+      flags: [
+        {
+          ruleId: rule.id,
+          ruleVersion: rule.version,
+          outcome: 'triggered',
+          answer: { type: 'noul', noul: 0.95 },
+          actionIds: [action.id],
+        },
+      ],
+    });
+    return { flagId: recorded[0]?.flagId ?? '', actionId: action.id };
+  }
+
+  it('retries a flaky handler and finishes succeeded on the third attempt', async () => {
+    const { flagId } = await seedExecution('msg-flaky', '31');
+    let calls = 0;
+    const registry = new ActionRegistry().register({
+      type: 'kafka_topic',
+      execute: async () => {
+        calls += 1;
+        if (calls <= 2) throw new Error(`flaky ${calls}`);
+        return { detail: 'ok' };
+      },
+    });
+    const executor = new ActionExecutor({
+      store: repos.executions,
+      registry,
+      maxAttempts: 5,
+      backoffBaseMs: 0,
+      random: () => 0,
+    });
+
+    await executor.runOnce();
+    await executor.runOnce();
+    const mid = await repos.executions.listByFlag(flagId);
+    expect(mid[0]?.status).toBe('pending');
+    expect(mid[0]?.lastError).toBe('flaky 2');
+
+    const result = await executor.runOnce();
+    expect(result.succeeded).toBe(1);
+    const rows = await repos.executions.listByFlag(flagId);
+    expect(rows[0]?.status).toBe('succeeded');
+    expect(rows[0]?.attempts).toBe(3);
+    expect(calls).toBe(3);
+  });
+
+  it('ends failed after ACTION_MAX_ATTEMPTS', async () => {
+    const { flagId } = await seedExecution('msg-permanent', '32');
+    const registry = new ActionRegistry().register({
+      type: 'kafka_topic',
+      execute: async () => {
+        throw new Error('always fails');
+      },
+    });
+    const executor = new ActionExecutor({
+      store: repos.executions,
+      registry,
+      maxAttempts: 2,
+      backoffBaseMs: 0,
+      random: () => 0,
+    });
+
+    await executor.runOnce();
+    await executor.runOnce();
+    const rows = await repos.executions.listByFlag(flagId);
+    expect(rows[0]?.status).toBe('failed');
+    expect(rows[0]?.attempts).toBe(2);
+    expect(rows[0]?.lastError).toBe('always fails');
+
+    // A finished execution is never claimed again.
+    expect((await executor.runOnce()).claimed).toBe(0);
   });
 });

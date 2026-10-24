@@ -7,3 +7,7 @@ allowBuilds:
   cpu-features: true
   protobufjs: true
   ssh2: true
+  msw: true
+
+minimumReleaseAgeExclude:
+  - vite@8.3.2

@@ -1,6 +1,8 @@
 import {
   actionContentSchema,
+  actionSchema,
   type ActionContent,
+  type ActionDefinition,
   type ActionPayload,
   type ActionType,
   type KafkaTopicConfig,
@@ -47,11 +49,13 @@ export class ActionRegistry {
   }
 
   async execute(
-    action: ActionContent,
+    action: ActionContent | ActionDefinition,
     payload: ActionPayload,
     context: ActionHandlerContext,
   ): Promise<ActionResult> {
-    const parsed = actionContentSchema.safeParse(action);
+    // Callers pass either client content (no id) or a stored definition (with id).
+    const parsed =
+      'id' in action ? actionSchema.safeParse(action) : actionContentSchema.safeParse(action);
     if (!parsed.success) {
       throw new ActionConfigError(
         `invalid ${action.type} action config: ${parsed.error.issues
