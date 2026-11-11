@@ -342,3 +342,21 @@ Related discrepancies found **outside** section 6 (recorded in `docs/DECISIONS.m
 - JS SDK changelog: https://docs.typesafe.ai/sdk/javascript/changelog
 - Agent skill: https://docs.typesafe.ai/agent-skill
 - npm registry: https://registry.npmjs.org/@typesafe-ai/sdk/latest
+
+## 15. Adversarial pack findings (T8.3)
+
+The pack in `apps/api/test/integration/adversarial.test.ts` sends instruction-like text, role-play
+framing, misleading negation, a 20k-character line, unicode/emoji, nested structured state and a
+JSON-looking string at one Noul rule. Against `jev-mock` (offline, deterministic):
+
+- The pipeline stayed stable for every payload: no exception, one `log.processed` event each, an
+  evaluation row each, and verdicts recorded.
+- Reported statuses: `clean` for the direct instruction injection, misleading negation,
+  unicode/emoji and JSON-looking string; `flagged` for role-play framing, the very long line and
+  nested structured state.
+- `jev-mock` matches literal lowercased substrings, so these results say nothing about a real
+  model's susceptibility. Run the same pack live with `JEV_LIVE_TESTS=1` and a
+  `TYPESAFE_API_KEY`, then record the real verdicts here.
+- The 20k-character line stayed within budget and was handled; oversize handling itself is covered
+  by the size-guard tests and the `OVERSIZE` E2E case.
+
