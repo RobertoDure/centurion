@@ -257,6 +257,13 @@ export class Pipeline {
       });
     }
 
+    // One verdict per in-scope rule (the strongest across state chunks).
+    for (const rule of rules) {
+      this.deps.metrics.increment('pipeline_verdict_total', {
+        verdict: verdicts.get(rule.id)?.verdict ?? 'NOT_TRIGGERED',
+      });
+    }
+
     const triggeredCount = flags.filter((flag) => flag.outcome === 'triggered').length;
     const evaluatedCount = verdicts.size;
     let status: EvaluationStatus = 'clean';

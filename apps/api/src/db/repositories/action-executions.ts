@@ -1,5 +1,5 @@
 import { actionPayloadSchema, type ActionDefinition, type ActionPayload } from '@centurion/contracts';
-import { eq, sql } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 
 import type { Database } from '../client';
 import { parseExternal } from '../parse';
@@ -153,6 +153,24 @@ export class ActionExecutionsRepository {
       })
       .from(actionExecutions)
       .where(eq(actionExecutions.flagId, flagId));
+    return rows;
+  }
+
+  /** Most recent outbox rows for one action (dashboard execution status). */
+  async listByAction(actionId: string, limit = 50): Promise<ExecutionSummary[]> {
+    const rows = await this.db
+      .select({
+        id: actionExecutions.id,
+        flagId: actionExecutions.flagId,
+        actionId: actionExecutions.actionId,
+        status: actionExecutions.status,
+        attempts: actionExecutions.attempts,
+        lastError: actionExecutions.lastError,
+      })
+      .from(actionExecutions)
+      .where(eq(actionExecutions.actionId, actionId))
+      .orderBy(desc(actionExecutions.createdAt))
+      .limit(limit);
     return rows;
   }
 }

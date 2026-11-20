@@ -32,6 +32,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@centurion/client-lib": "workspace:*",
     "@testcontainers/kafka": "^12.2.0",
     "@testcontainers/postgresql": "^12.2.0",
     "@types/pg": "^8.23.1",

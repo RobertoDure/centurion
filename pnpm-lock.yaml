@@ -233,6 +233,9 @@ importers:
         specifier: ^4.6.5
         version: 4.6.5
     devDependencies:
+      '@centurion/client-lib':
+        specifier: workspace:*
+        version: link:../../packages/client-lib
       '@testcontainers/kafka':
         specifier: ^12.2.0
         version: 12.2.0
