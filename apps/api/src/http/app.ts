@@ -23,7 +23,8 @@ const noopAuthenticate: AuthenticateHook = async () => {};
  * `fastify.inject` without Postgres or Kafka.
  */
 export function buildApp(deps: HttpAppDeps): FastifyInstance {
-  const app = Fastify({ logger: deps.logger ?? false });
+  const app =
+    deps.logger === undefined ? Fastify({ logger: false }) : Fastify({ loggerInstance: deps.logger });
 
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
