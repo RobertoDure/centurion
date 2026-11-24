@@ -83,3 +83,18 @@ if the project pins Node 24 or the Confluent client ships a Node 25 prebuilt.
 
 (Recorded when the dashboard lands.) The dashboard uses Tailwind plus small local UI primitives
 rather than running the interactive shadcn/ui generator, keeping the build reproducible and offline.
+## 2026-10-01 - Section 2 assumptions adopted
+
+Every default from PLAN.md section 2 is adopted as written:
+
+| # | Default | Where |
+|---|---|---|
+| A1 | The dashboard consumes Kafka through apps/api over SSE | apps/api/src/sse/hub.ts, GET /api/v1/stream |
+| A2 | One Kafka message = one log record; sendBatch batches | packages/client-lib |
+| A3 | The log payload becomes the Jev state; metadata stays out | apps/api/src/jev/state-builder.ts |
+| A4 | A rule is scope + one question + one condition + actions | packages/contracts/src/rule.ts |
+| A5 | Postgres stores rules, versions, actions, flags, executions; no raw bodies | apps/api/src/db/schema.ts; excerpts opt-in via EXCERPT_CHARS |
+| A6 | The client library is TypeScript/Node first | packages/client-lib |
+| A7 | No auth, but every /api/v1 route passes an authenticate hook | apps/api/src/http/deps.ts (no-op) |
+| A8 | Pin jev-1.13.0 and log the model of every response | JEV_MODEL default; flags/evaluations store model |
+| A9 | One apps/api instance | CONSUMER_CONCURRENCY=1; the sequential ConsumerRunner |
