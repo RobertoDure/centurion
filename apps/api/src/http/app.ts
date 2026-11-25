@@ -1,5 +1,5 @@
 import swagger from '@fastify/swagger';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import {
   jsonSchemaTransform,
   serializerCompiler,
@@ -23,8 +23,9 @@ const noopAuthenticate: AuthenticateHook = async () => {};
  * `fastify.inject` without Postgres or Kafka.
  */
 export function buildApp(deps: HttpAppDeps): FastifyInstance {
-  const app =
-    deps.logger === undefined ? Fastify({ logger: false }) : Fastify({ loggerInstance: deps.logger });
+  const serverOptions: FastifyServerOptions =
+    deps.logger === undefined ? { logger: false } : { loggerInstance: deps.logger };
+  const app = Fastify(serverOptions);
 
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);

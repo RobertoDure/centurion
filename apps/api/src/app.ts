@@ -5,6 +5,7 @@ import { pino, type Logger } from 'pino';
 import { ActionExecutor } from './actions/executor';
 import { createKafkaTopicHandler } from './actions/kafka-topic';
 import { createDefaultActionRegistry } from './actions/registry';
+import { assertUrlAllowed } from './actions/ssrf';
 import { createWebhookHandler } from './actions/webhook';
 import { kafkaBrokers, listFromCsv, type AppConfig } from './config';
 import {
@@ -124,8 +125,11 @@ export async function buildApp(deps: ApplicationDeps): Promise<Application> {
 
   const hub = new SseHub({ ringBufferSize: config.SSE_RING_BUFFER_SIZE, logger });
 
+  const allowedWebhookHosts = listFromCsv(config.WEBHOOK_ALLOWED_HOSTS);
   const registry = createDefaultActionRegistry({
-    webhook: createWebhookHandler(),
+    webhook: createWebhookHandler({
+      guard: (url) => assertUrlAllowed(url, { allowedHosts: allowedWebhookHosts }),
+    }),
     kafkaTopic: createKafkaTopicHandler({
       producer: new KafkaJsProducer(producer.producer),
       defaultTopic: config.KAFKA_TOPIC_FLAGS,

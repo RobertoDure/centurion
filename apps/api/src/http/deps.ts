@@ -1,4 +1,5 @@
-import type { FastifyBaseLogger, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
+import type { Logger } from 'pino';
 
 import type { Repositories } from '../db/repositories';
 import type { JevGateway } from '../jev/gateway';
@@ -26,5 +27,6 @@ export interface HttpAppDeps {
   redactKeys?: readonly string[];
   now?: () => Date;
   authenticate?: AuthenticateHook;
-  logger?: FastifyBaseLogger;
+  /** Passed to Fastify via `loggerInstance` (Fastify 5 rejects a pino instance in `logger`). */
+  logger?: Logger;
 }
