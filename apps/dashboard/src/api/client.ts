@@ -31,6 +31,7 @@ export interface ApiRequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   body?: unknown;
   signal?: AbortSignal;
+  headers?: HeadersInit;
 }
 
 async function readPayload(response: Response): Promise<unknown> {
@@ -48,43 +49,81 @@ function toProblem(response: Response, payload: unknown): ProblemDetails {
   if (parsed.success) return parsed.data;
   return {
     type: 'about:blank',
-    title: response.statusText === '' ? `Request failed with status ${response.status}` : response.statusText,
+    title:
+      response.statusText === ''
+        ? `Request failed with status ${response.status}`
+        : response.statusText,
     status: response.status,
   };
 }
 
-export async function apiRequest<TOutput>(
-  schema: Parser<TOutput>,
-  path: string,
-  options: ApiRequestOptions = {},
-): Promise<TOutput> {
-  const headers = new Headers({ accept: 'application/json' });
+/**
+ * Low-level fetch that resolves the URL and throws a typed ApiError on a
+ * non-2xx response. Streaming callers (SSE) read the returned body themselves.
+ */
+async function fetchRaw(path: string, options: ApiRequestOptions = {}): Promise<Response> {
+  const headers = new Headers(options.headers);
+  headers.set('accept', headers.get('accept') ?? 'application/json');
   if (options.body !== undefined) headers.set('content-type', 'application/json');
-  const response = await fetch(apiUrl(path), {
+  return fetch(apiUrl(path), {
     method: options.method ?? 'GET',
     headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
     signal: options.signal,
   });
-  const payload = await readPayload(response);
+}
+
+export async function apiFetch(
+  path: string,
+  options: ApiRequestOptions = {},
+): Promise<Response> {
+  const response = await fetchRaw(path, options);
   if (!response.ok) {
-    throw new ApiError(toProblem(response, payload));
+    throw new ApiError(toProblem(response, await readPayload(response)));
   }
-  return schema.parse(payload);
+  return response;
+}
+
+/**
+ * Parses the body even when the status is non-2xx. Used for /ready, which
+ * returns 503 together with a valid readiness body.
+ */
+export async function apiRequestAny<TOutput>(
+  schema: Parser<TOutput>,
+  path: string,
+  options: ApiRequestOptions = {},
+): Promise<TOutput> {
+  const response = await fetchRaw(path, options);
+  return schema.parse(await readPayload(response));
+}
+
+/** Fetches and validates a JSON response with a contracts (or local) schema. */
+export async function apiRequest<TOutput>(
+  schema: Parser<TOutput>,
+  path: string,
+  options: ApiRequestOptions = {},
+): Promise<TOutput> {
+  const response = await apiFetch(path, options);
+  return schema.parse(await readPayload(response));
+}
+
+/** Fetches a plain-text response (e.g. the Prometheus metrics endpoint). */
+export async function apiRequestText(
+  path: string,
+  options: ApiRequestOptions = {},
+): Promise<string> {
+  const response = await apiFetch(path, {
+    ...options,
+    headers: { accept: 'text/plain', ...options.headers },
+  });
+  return response.text();
 }
 
 export async function apiRequestVoid(
   path: string,
   options: ApiRequestOptions = {},
 ): Promise<void> {
-  const response = await fetch(apiUrl(path), {
-    method: options.method ?? 'DELETE',
-    headers: { accept: 'application/json' },
-    signal: options.signal,
-  });
-  if (!response.ok) {
-    throw new ApiError(toProblem(response, await readPayload(response)));
-  }
+  await apiFetch(path, { ...options, method: options.method ?? 'DELETE' });
 }
 
 export function errorMessage(error: unknown): string {

@@ -14,6 +14,23 @@ import { apiRequest, apiRequestVoid, type ApiRequestOptions } from './client';
 
 const ruleIdPath = (id: string): string => `/api/v1/rules/${encodeURIComponent(id)}`;
 
+/** A version row whose stored snapshot failed contract validation. */
+export const invalidRuleVersionSchema = z.strictObject({
+  ruleId: z.uuid(),
+  version: z.int().nonnegative(),
+  reason: z.string(),
+  createdAt: z.iso.datetime({ offset: true }),
+});
+
+export const ruleVersionEntrySchema = z.union([ruleVersionSchema, invalidRuleVersionSchema]);
+export type RuleVersionEntry = z.infer<typeof ruleVersionEntrySchema>;
+
+export const ruleVersionListResponseSchema = z.strictObject({
+  items: z.array(ruleVersionEntrySchema),
+  total: z.int().nonnegative(),
+});
+export type RuleVersionListResponse = z.infer<typeof ruleVersionListResponseSchema>;
+
 export const rulesApi = {
   list(options: ApiRequestOptions = {}) {
     return apiRequest(ruleListResponseSchema, '/api/v1/rules', options);
@@ -37,7 +54,7 @@ export const rulesApi = {
     return apiRequest(ruleDtoSchema, `${ruleIdPath(id)}/disable`, { method: 'POST' });
   },
   versions(id: string, options: ApiRequestOptions = {}) {
-    return apiRequest(z.array(ruleVersionSchema), `${ruleIdPath(id)}/versions`, options);
+    return apiRequest(ruleVersionListResponseSchema, `${ruleIdPath(id)}/versions`, options);
   },
   test(request: RuleTestRequest) {
     return apiRequest(ruleTestResponseSchema, '/api/v1/rules/test', {

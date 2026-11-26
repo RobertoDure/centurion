@@ -1,6 +1,7 @@
 import type { ActionDto } from '@centurion/contracts';
 import { useState } from 'react';
 
+import { isValidAction } from '../api/actions';
 import { errorMessage } from '../api/client';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -18,6 +19,11 @@ import { ActionExecutionStatus } from '../features/actions/ActionExecutionStatus
 import { ActionForm } from '../features/actions/ActionForm';
 import { useActions, useDeleteAction } from '../hooks/useActions';
 
+interface DeletableAction {
+  id: string;
+  name: string;
+}
+
 type EditingState = ActionDto | 'new' | null;
 
 export function ActionsPage() {
@@ -25,9 +31,9 @@ export function ActionsPage() {
   const deleteAction = useDeleteAction();
   const { toast } = useToast();
   const [editing, setEditing] = useState<EditingState>(null);
-  const [pendingDelete, setPendingDelete] = useState<ActionDto | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<DeletableAction | null>(null);
 
-  const handleDelete = async (action: ActionDto) => {
+  const handleDelete = async (action: DeletableAction) => {
     try {
       await deleteAction.mutateAsync(action.id);
       toast({ title: 'Action deleted', variant: 'success' });
@@ -40,6 +46,8 @@ export function ActionsPage() {
       });
     }
   };
+
+  const entries = actionsQuery.data?.items ?? [];
 
   return (
     <div className="space-y-4">
@@ -73,58 +81,93 @@ export function ActionsPage() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {actionsQuery.data.map((action) => (
-              <TableRow key={action.id}>
-                <TableCell className="font-medium text-slate-900">{action.name}</TableCell>
-                <TableCell>
-                  <Badge variant={action.type === 'webhook' ? 'info' : 'neutral'}>
-                    {action.type}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <Badge variant={action.enabled ? 'success' : 'neutral'}>
-                    {action.enabled ? 'enabled' : 'disabled'}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  {action.type === 'webhook' ? (
-                    action.hasSecret ? (
-                      <Badge variant="success">configured</Badge>
-                    ) : (
-                      <span className="text-xs text-slate-500">not set</span>
-                    )
-                  ) : (
+            {entries.map((entry) => {
+              if (isValidAction(entry)) {
+                return (
+                  <TableRow key={entry.id}>
+                    <TableCell className="font-medium text-slate-900">{entry.name}</TableCell>
+                    <TableCell>
+                      <Badge variant={entry.type === 'webhook' ? 'info' : 'neutral'}>
+                        {entry.type}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={entry.enabled ? 'success' : 'neutral'}>
+                        {entry.enabled ? 'enabled' : 'disabled'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {entry.type === 'webhook' ? (
+                        entry.hasSecret ? (
+                          <Badge variant="success">configured</Badge>
+                        ) : (
+                          <span className="text-xs text-slate-500">not set</span>
+                        )
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <ActionExecutionStatus actionId={entry.id} />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="text-sm font-medium text-slate-700 underline-offset-2 hover:underline"
+                          onClick={() => setEditing(entry)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="text-sm font-medium text-red-600 underline-offset-2 hover:underline"
+                          onClick={() => setPendingDelete({ id: entry.id, name: entry.name })}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              }
+              return (
+                <TableRow key={entry.id}>
+                  <TableCell>
+                    <div className="font-medium text-slate-900">{entry.name}</div>
+                    <div className="text-xs text-red-600">{entry.invalidReason}</div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="neutral">{entry.type}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={entry.enabled ? 'success' : 'neutral'}>
+                      {entry.enabled ? 'enabled' : 'disabled'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="danger">invalid</Badge>
+                  </TableCell>
+                  <TableCell>
                     <span className="text-xs text-slate-400">—</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <ActionExecutionStatus actionId={action.id} />
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      className="text-sm font-medium text-slate-700 underline-offset-2 hover:underline"
-                      onClick={() => setEditing(action)}
-                    >
-                      Edit
-                    </button>
+                  </TableCell>
+                  <TableCell>
                     <button
                       type="button"
                       className="text-sm font-medium text-red-600 underline-offset-2 hover:underline"
-                      onClick={() => setPendingDelete(action)}
+                      onClick={() => setPendingDelete({ id: entry.id, name: entry.name })}
                     >
                       Delete
                     </button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       )}
 
-      {actionsQuery.data !== undefined && actionsQuery.data.length === 0 && (
+      {actionsQuery.data !== undefined && entries.length === 0 && (
         <p className="text-sm text-slate-500">No actions yet.</p>
       )}
 

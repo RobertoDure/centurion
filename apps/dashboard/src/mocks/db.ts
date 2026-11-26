@@ -2,6 +2,7 @@ import type {
   ActionDto,
   ActionExecution,
   Flag,
+  ReadyResponse,
   Rule,
   RuleDto,
   RuleVersion,
@@ -17,6 +18,15 @@ const SCORE_RULE_ID = '33333333-3333-4333-8333-333333333333';
 const T0 = '2026-09-20T09:00:00.000Z';
 const T1 = '2026-09-25T14:30:00.000Z';
 const T2 = '2026-09-30T11:15:00.000Z';
+
+/** A stored flag whose JSONB failed contract validation. */
+export interface InvalidFlag {
+  id: string;
+  invalid: true;
+  invalidReason: string;
+}
+
+export type StoredFlag = Flag | InvalidFlag;
 
 function seedRules(): RuleDto[] {
   const noul: Rule = {
@@ -175,7 +185,7 @@ function seedExecutions(): ActionExecution[] {
   ];
 }
 
-function seedFlags(): Flag[] {
+function seedFlags(): StoredFlag[] {
   return [
     {
       id: 'f0000000-0000-4000-8000-000000000001',
@@ -185,7 +195,7 @@ function seedFlags(): Flag[] {
       outcome: 'triggered',
       answer: { type: 'noul', noul: 0.91 },
       sourceId: 'checkout-service',
-      createdAt: T2,
+      createdAt: '2026-09-30T12:05:00.000Z',
     },
     {
       id: 'f0000000-0000-4000-8000-000000000002',
@@ -201,9 +211,66 @@ function seedFlags(): Flag[] {
         confidence: 0.42,
       },
       sourceId: 'support-bot',
-      createdAt: T1,
+      createdAt: '2026-09-30T11:40:00.000Z',
+    },
+    {
+      id: 'f0000000-0000-4000-8000-000000000003',
+      messageId: 'm-0003',
+      ruleId: CHOICE_RULE_ID,
+      ruleVersion: 1,
+      outcome: 'triggered',
+      answer: {
+        type: 'choice',
+        choice: 'billing',
+        probabilities: { billing: 0.88, technical: 0.08, sales: 0.02, none: 0.02 },
+        confidence: 0.81,
+      },
+      sourceId: 'support-bot',
+      createdAt: '2026-09-30T10:20:00.000Z',
+    },
+    {
+      id: 'f0000000-0000-4000-8000-000000000004',
+      invalid: true,
+      invalidReason: 'answer failed flagSchema validation: unrecognised primitive',
     },
   ];
+}
+
+function seedReadiness(): ReadyResponse {
+  return {
+    status: 'ready',
+    checks: [
+      { name: 'database', ok: true },
+      { name: 'kafka', ok: true },
+      { name: 'jev_auth', ok: true },
+    ],
+  };
+}
+
+function seedMetricsText(): string {
+  return [
+    '# HELP centurion_consumer_lag Approximate Kafka consumer lag',
+    '# TYPE centurion_consumer_lag gauge',
+    'centurion_consumer_lag 7',
+    '# TYPE centurion_messages_processed_total counter',
+    'centurion_messages_processed_total{status="clean"} 120',
+    'centurion_messages_processed_total{status="flagged"} 8',
+    'centurion_messages_processed_total{status="uncertain"} 3',
+    '# TYPE centurion_jev_request_duration_seconds histogram',
+    'centurion_jev_request_duration_seconds_count{model="jev-mock-1.0"} 131',
+    '# TYPE centurion_jev_throttled_total counter',
+    'centurion_jev_throttled_total{code="429"} 2',
+    '# TYPE centurion_dlq_total counter',
+    'centurion_dlq_total{reason="invalid_envelope"} 3',
+    'centurion_dlq_total{reason="oversize"} 1',
+    '# TYPE centurion_uncertain_ignored_total counter',
+    'centurion_uncertain_ignored_total 2',
+    '# TYPE centurion_rule_verdicts_total counter',
+    'centurion_rule_verdicts_total{verdict="TRIGGERED"} 10',
+    'centurion_rule_verdicts_total{verdict="UNCERTAIN"} 3',
+    'centurion_rule_verdicts_total{verdict="NOT_TRIGGERED"} 110',
+    '',
+  ].join('\n');
 }
 
 export interface DashboardDb {
@@ -211,7 +278,9 @@ export interface DashboardDb {
   ruleVersions: RuleVersion[];
   actions: ActionDto[];
   actionExecutions: ActionExecution[];
-  flags: Flag[];
+  flags: StoredFlag[];
+  readiness: ReadyResponse;
+  metricsText: string;
 }
 
 function createSeed(): DashboardDb {
@@ -222,6 +291,8 @@ function createSeed(): DashboardDb {
     actions: seedActions(),
     actionExecutions: seedExecutions(),
     flags: seedFlags(),
+    readiness: seedReadiness(),
+    metricsText: seedMetricsText(),
   };
 }
 
@@ -235,4 +306,6 @@ export function resetDb(): void {
   db.actions = seed.actions;
   db.actionExecutions = seed.actionExecutions;
   db.flags = seed.flags;
+  db.readiness = seed.readiness;
+  db.metricsText = seed.metricsText;
 }

@@ -6,6 +6,7 @@ import { Controller, useForm } from 'react-hook-form';
 import type { Resolver } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 
+import { isValidAction } from '../../api/actions';
 import { errorMessage } from '../../api/client';
 import { Button } from '../../components/ui/Button';
 import { Checkbox } from '../../components/ui/Checkbox';
@@ -186,7 +187,7 @@ export function RuleEditorForm({ initialValues, ruleId, onSaved }: RuleEditorFor
             onChange={(next) =>
               form.setValue('actionIds', next, { shouldDirty: true, shouldValidate: true })
             }
-            actions={actionsQuery.data ?? []}
+            actions={(actionsQuery.data?.items ?? []).filter(isValidAction)}
             uncertainPolicy={uncertainPolicy ?? 'ignore'}
             onUncertainPolicyChange={(next) =>
               form.setValue('uncertainPolicy', next, { shouldDirty: true, shouldValidate: true })

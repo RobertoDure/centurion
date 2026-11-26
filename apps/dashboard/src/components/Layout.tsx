@@ -28,11 +28,14 @@ export function Layout() {
           <NavLink to="/" className="text-lg font-semibold tracking-tight text-slate-900">
             Centurion
           </NavLink>
-          <nav aria-label="Main" className="flex items-center gap-1">
+          <nav aria-label="Main" className="flex flex-wrap items-center gap-1">
             <NavItem to="/" end>
               Rules
             </NavItem>
             <NavItem to="/actions">Actions</NavItem>
+            <NavItem to="/flags">Flags</NavItem>
+            <NavItem to="/live">Live</NavItem>
+            <NavItem to="/status">Status</NavItem>
           </nav>
         </div>
       </header>

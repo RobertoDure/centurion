@@ -1,21 +1,15 @@
 import { logEnvelopeSchema, ruleTestRequestSchema } from '@centurion/contracts';
-import type {
-  JevAnswer,
-  JevQuestion,
-  RuleTestResponse,
-  UncertainPolicy,
-} from '@centurion/contracts';
+import type { JevQuestion, RuleTestResponse, UncertainPolicy } from '@centurion/contracts';
 import { useState } from 'react';
 
+import { errorMessage } from '../../api/client';
+import { AnswerView } from '../../components/answer/AnswerView';
 import { Badge } from '../../components/ui/Badge';
 import type { BadgeVariant } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Textarea } from '../../components/ui/Textarea';
 import { useTestRule } from '../../hooks/useRules';
-import { errorMessage } from '../../api/client';
-import { formatPercent } from '../../lib/format';
 import type { ConditionDraft } from '../../types/rule-form';
-import { ProbabilitiesTable } from './ProbabilitiesTable';
 
 const VERDICT_VARIANTS: Record<RuleTestResponse['verdict'], BadgeVariant> = {
   TRIGGERED: 'danger',
@@ -112,41 +106,6 @@ export function TestPanel({ question, condition, uncertainPolicy }: TestPanelPro
           </p>
         </div>
       )}
-    </div>
-  );
-}
-
-function AnswerView({ answer }: { answer: JevAnswer }) {
-  if (answer.type === 'noul') {
-    return (
-      <p className="text-sm text-slate-700">
-        Noul probability:{' '}
-        <span className="font-semibold">{formatPercent(answer.noul, 1)}</span>
-      </p>
-    );
-  }
-  if (answer.type === 'choice') {
-    return (
-      <div className="space-y-2">
-        <p className="text-sm text-slate-700">
-          Choice: <span className="font-semibold">{answer.choice}</span>
-        </p>
-        <p className="text-xs text-slate-500">Confidence: {formatPercent(answer.confidence, 1)}</p>
-        <ProbabilitiesTable probabilities={answer.probabilities} />
-      </div>
-    );
-  }
-  const legend: Record<string, string> = {};
-  for (const [key, value] of Object.entries(answer.legend)) {
-    legend[key] = typeof value === 'string' ? value : JSON.stringify(value);
-  }
-  return (
-    <div className="space-y-2">
-      <p className="text-sm text-slate-700">
-        Score: <span className="font-semibold">{answer.score.toFixed(2)}</span>
-      </p>
-      <p className="text-xs text-slate-500">Confidence: {formatPercent(answer.confidence, 1)}</p>
-      <ProbabilitiesTable probabilities={answer.probabilities} legend={legend} />
     </div>
   );
 }

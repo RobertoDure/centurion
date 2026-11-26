@@ -46,15 +46,23 @@ export function VersionHistoryDrawer({ rule, onClose }: VersionHistoryDrawerProp
             </TableRow>
           </TableHead>
           <TableBody>
-            {versions.data.map((version) => (
-              <TableRow key={version.version}>
+            {versions.data.items.map((version) => (
+              <TableRow key={`${version.version}-${'snapshot' in version ? 'valid' : 'invalid'}`}>
                 <TableCell className="tabular-nums">v{version.version}</TableCell>
                 <TableCell>{formatDateTime(version.createdAt)}</TableCell>
                 <TableCell>
-                  <Badge variant="info">{version.snapshot.question.type}</Badge>
+                  {'snapshot' in version ? (
+                    <Badge variant="info">{version.snapshot.question.type}</Badge>
+                  ) : (
+                    <Badge variant="danger" title={version.reason}>
+                      invalid
+                    </Badge>
+                  )}
                 </TableCell>
-                <TableCell>{version.snapshot.enabled ? 'yes' : 'no'}</TableCell>
-                <TableCell>{version.snapshot.name}</TableCell>
+                <TableCell>
+                  {'snapshot' in version ? (version.snapshot.enabled ? 'yes' : 'no') : '—'}
+                </TableCell>
+                <TableCell>{'snapshot' in version ? version.snapshot.name : '—'}</TableCell>
               </TableRow>
             ))}
           </TableBody>

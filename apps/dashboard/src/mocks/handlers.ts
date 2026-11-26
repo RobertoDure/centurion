@@ -4,13 +4,16 @@ import type { z } from 'zod';
 import {
   actionContentSchema,
   actionDtoSchema,
+  actionExecutionSchema,
   evaluateRule,
+  healthResponseSchema,
   problemDetailsSchema,
+  readyResponseSchema,
   ruleContentSchema,
   ruleDtoSchema,
   ruleListResponseSchema,
   ruleTestRequestSchema,
-  actionExecutionSchema,
+  sseEventSchema,
 } from '@centurion/contracts';
 import type {
   ActionContent,
@@ -22,10 +25,11 @@ import type {
   RuleDto,
   RuleTestRequest,
   RuleTestResponse,
+  SseEvent,
   ValidationIssue,
 } from '@centurion/contracts';
 
-import { db, toRuleSnapshot } from './db';
+import { db, toRuleSnapshot, type StoredFlag } from './db';
 
 let idCounter = 0;
 
@@ -39,12 +43,16 @@ function newId(): string {
   return `00000000-0000-4000-8000-${suffix}`;
 }
 
+function isInvalidFlag(flag: StoredFlag): flag is Extract<StoredFlag, { invalid: true }> {
+  return 'invalid' in flag;
+}
+
 function problemResponse(status: number, title: string, detail?: string): Response {
   const problem: ProblemDetails = {
     type: 'about:blank',
     title,
     status,
-    ...(detail !== undefined ? { detail } : {}),
+    ...(detail === undefined ? {} : { detail }),
   };
   return HttpResponse.json(problemDetailsSchema.parse(problem), {
     status,
@@ -57,7 +65,12 @@ function validationProblem(error: z.ZodError): Response {
     path: issue.path.map((segment) => String(segment)).join('.'),
     message: issue.message,
   }));
-  const problem: ProblemDetails = { type: 'about:blank', title: 'Validation failed', status: 422, errors };
+  const problem: ProblemDetails = {
+    type: 'about:blank',
+    title: 'Validation failed',
+    status: 422,
+    errors,
+  };
   return HttpResponse.json(problemDetailsSchema.parse(problem), {
     status: 422,
     headers: { 'content-type': 'application/problem+json' },
@@ -128,7 +141,7 @@ function webhookDto(
     type: 'webhook',
     name: content.name,
     enabled: content.enabled,
-    config: { url, ...(headers !== undefined ? { headers } : {}), timeoutMs },
+    config: { url, ...(headers === undefined ? {} : { headers }), timeoutMs },
     hasSecret,
   };
 }
@@ -150,14 +163,99 @@ function actionDtoFromContent(
   existingHasSecret: boolean,
 ): ActionDto {
   if (content.type === 'webhook') {
-    const hasSecret = content.config.secret !== undefined ? true : existingHasSecret;
+    const hasSecret = content.config.secret === undefined ? existingHasSecret : true;
     return webhookDto(content, id, hasSecret);
   }
   return kafkaDto(content, id);
 }
 
+let streamStep = 0;
+
+const STREAM_RULE_ID = '11111111-1111-4111-8111-111111111111';
+
+function mockStreamFlag(step: number): Flag {
+  return {
+    id: newId(),
+    messageId: `mock-msg-${step}`,
+    ruleId: STREAM_RULE_ID,
+    ruleVersion: 3,
+    outcome: 'triggered',
+    answer: { type: 'noul', noul: 0.9 },
+    sourceId: 'checkout-service',
+    createdAt: new Date().toISOString(),
+  };
+}
+
+/** A repeating, schema-valid event sequence for the dev/live feed. */
+export function nextStreamEvent(step: number): SseEvent {
+  const phase = step % 5;
+  if (phase === 4) {
+    return {
+      type: 'consumer.status',
+      data: { status: 'running', lag: 7 - (step % 4), at: new Date().toISOString() },
+    };
+  }
+  if (phase === 2) {
+    return { type: 'flag.created', data: mockStreamFlag(step) };
+  }
+  const status = phase === 0 ? 'clean' : phase === 1 ? 'flagged' : 'partial';
+  return {
+    type: 'log.processed',
+    data: {
+      messageId: `mock-${step}`,
+      sourceId: phase === 1 ? 'checkout-service' : 'support-bot',
+      level: phase === 3 ? 'warn' : 'info',
+      status,
+      flagCount: status === 'flagged' ? 1 : 0,
+      partial: status === 'partial',
+      model: 'jev-mock-1.0',
+    },
+  };
+}
+
 export const handlers = [
-  http.get('/api/v1/health', () => HttpResponse.json({ status: 'ok' })),
+  http.get('/api/v1/health', () => HttpResponse.json(healthResponseSchema.parse({ status: 'ok' }))),
+
+  http.get('/api/v1/ready', () => {
+    const body = readyResponseSchema.parse(db.readiness);
+    return HttpResponse.json(body, { status: body.status === 'ready' ? 200 : 503 });
+  }),
+
+  http.get('/api/v1/metrics', () => {
+    return new HttpResponse(db.metricsText, {
+      headers: { 'content-type': 'text/plain; version=0.0.4; charset=utf-8' },
+    });
+  }),
+
+  http.get('/api/v1/stream', () => {
+    const encoder = new TextEncoder();
+    let interval: ReturnType<typeof setInterval> | undefined;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(': connected\n\n'));
+        interval = setInterval(() => {
+          streamStep += 1;
+          const parsed = sseEventSchema.safeParse(nextStreamEvent(streamStep));
+          if (!parsed.success) return;
+          try {
+            controller.enqueue(
+              encoder.encode(
+                `id: ${streamStep}\nevent: ${parsed.data.type}\ndata: ${JSON.stringify(parsed.data.data)}\n\n`,
+              ),
+            );
+          } catch {
+            if (interval !== undefined) clearInterval(interval);
+          }
+        }, 1500);
+      },
+      cancel() {
+        if (interval !== undefined) clearInterval(interval);
+      },
+    });
+    return new HttpResponse(stream, {
+      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
+    });
+  }),
 
   http.get('/api/v1/rules', () => {
     const response = ruleListResponseSchema.parse({ items: db.rules, total: db.rules.length });
@@ -252,14 +350,15 @@ export const handlers = [
 
   http.get('/api/v1/rules/:id/versions', ({ params }) => {
     const id = String(params.id);
-    const versions = db.ruleVersions
+    const items = db.ruleVersions
       .filter((version) => version.ruleId === id)
       .sort((a, b) => b.version - a.version);
-    return HttpResponse.json(versions);
+    return HttpResponse.json({ items, total: items.length });
   }),
 
   http.get('/api/v1/actions', () => {
-    return HttpResponse.json(db.actions.map((action) => actionDtoSchema.parse(action)));
+    const items = db.actions.map((action) => actionDtoSchema.parse(action));
+    return HttpResponse.json({ items, total: items.length });
   }),
 
   http.post('/api/v1/actions', async ({ request }) => {
@@ -305,13 +404,33 @@ export const handlers = [
     const limit = Number(url.searchParams.get('limit') ?? '50');
     const offset = Number(url.searchParams.get('offset') ?? '0');
     const ruleId = url.searchParams.get('ruleId');
+    const sourceId = url.searchParams.get('sourceId');
     const outcome = url.searchParams.get('outcome');
-    let items: Flag[] = db.flags;
-    if (ruleId !== null) items = items.filter((flag) => flag.ruleId === ruleId);
-    if (outcome !== null) items = items.filter((flag) => flag.outcome === outcome);
-    return HttpResponse.json({
-      items: items.slice(offset, offset + limit),
-      total: items.length,
+    const from = url.searchParams.get('from');
+    const to = url.searchParams.get('to');
+    const hasTimeFilter = from !== null || to !== null;
+
+    const items = db.flags.filter((flag) => {
+      if (isInvalidFlag(flag)) return !hasTimeFilter;
+      if (ruleId !== null && flag.ruleId !== ruleId) return false;
+      if (sourceId !== null && flag.sourceId !== sourceId) return false;
+      if (outcome !== null && flag.outcome !== outcome) return false;
+      if (from !== null && flag.createdAt < from) return false;
+      if (to !== null && flag.createdAt > to) return false;
+      return true;
     });
+
+    const sorted = [...items].sort((a, b) => {
+      const aTime = isInvalidFlag(a) ? '' : a.createdAt;
+      const bTime = isInvalidFlag(b) ? '' : b.createdAt;
+      return bTime.localeCompare(aTime);
+    });
+    return HttpResponse.json({ items: sorted.slice(offset, offset + limit), limit, offset });
+  }),
+
+  http.get('/api/v1/flags/:id', ({ params }) => {
+    const flag = db.flags.find((entry) => entry.id === String(params.id));
+    if (flag === undefined) return problemResponse(404, 'Flag not found');
+    return HttpResponse.json(flag);
   }),
 ];
